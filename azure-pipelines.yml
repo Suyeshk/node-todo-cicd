@@ -1,0 +1,50 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
+- job: setup-prerequisite
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.x'
+      addToPath: true
+  - script: |
+      pip install -r requirements.txt
+    displayName: 'Install dependencies'
+
+- job: lint
+  container:
+    image: 'docker://docker:dind'
+  steps:
+  - script: |
+      docker pull sdesbure/docker-yamllint:latest
+      docker run -v $(pwd):/workdir sdesbure/docker-yamllint yamllint .
+    displayName: 'YAML Lint'
+  - script: |
+      docker pull docker.io/ghcr.io/terraform-linters/tflint
+      docker run -v $(pwd):/data -t wata727/tflint:latest --error-with-issues
+    displayName: 'Terraform Lint'
+  - script: |
+      docker pull node:12
+      npm install -g eslint
+      eslint .
+    displayName: 'ESLint'
+
+- job: test
+  steps:
+  - script: |
+      pytest
+    displayName: 'Run tests'
+
+- job: plan
+  steps:
+  - script: |
+      terraform init
+      terraform plan -out=tfplan
+    displayName: 'Terraform Plan'
+  - script: |
+      terraform apply -auto-approve tfplan
+    displayName: 'Terraform Apply'
